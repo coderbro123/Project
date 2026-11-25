@@ -1,0 +1,154 @@
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.sql.*;
+
+public class App extends JFrame {
+    private static final String URL = "jdbc:mysql://localhost:3306/simple_hostel";
+    private static final String USER = "root";
+    private static final String PASS = "root"; 
+
+    private JTextField txtName, txtPhone, txtRoomNo, txtStudId, txtAmount;
+    private JTable studentTable;
+    private DefaultTableModel tableModel;
+
+    public App() {
+        setTitle("Hostel Management System - Semester Project");
+        setSize(650, 450);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        JTabbedPane tabs = new JTabbedPane();
+
+        JPanel admitPanel = new JPanel(new GridLayout(5, 2, 10, 15));
+        admitPanel.setBorder(BorderFactory.createEmptyBorder(30, 50, 30, 50));
+
+        txtName = new JTextField();
+        txtPhone = new JTextField();
+        txtRoomNo = new JTextField();
+        JButton btnAdmit = new JButton("Allocate Room & Save");
+
+        admitPanel.add(new JLabel("Student Name:"));
+        admitPanel.add(txtName);
+        admitPanel.add(new JLabel("Phone Number:"));
+        admitPanel.add(txtPhone);
+        admitPanel.add(new JLabel("Room No:"));
+        admitPanel.add(txtRoomNo);
+        admitPanel.add(new JLabel(""));
+        admitPanel.add(btnAdmit);
+
+        btnAdmit.addActionListener(e -> admitStudent());
+
+        JPanel feePanel = new JPanel(new GridLayout(4, 2, 10, 15));
+        feePanel.setBorder(BorderFactory.createEmptyBorder(40, 50, 40, 50));
+
+        txtStudId = new JTextField();
+        txtAmount = new JTextField();
+        JButton btnPay = new JButton("Record Fee Payment");
+
+        feePanel.add(new JLabel("Student ID (check Tab 3):"));
+        feePanel.add(txtStudId);
+        feePanel.add(new JLabel("Fee Amount (INR):"));
+        feePanel.add(txtAmount);
+        feePanel.add(new JLabel(""));
+        feePanel.add(btnPay);
+
+        btnPay.addActionListener(e -> recordFee());
+
+        JPanel viewPanel = new JPanel(new BorderLayout());
+        tableModel = new DefaultTableModel(new String[]{"ID", "Name", "Phone", "Room No", "Total Paid"}, 0);
+        studentTable = new JTable(tableModel);
+        JButton btnRefresh = new JButton("Refresh Records");
+        btnRefresh.addActionListener(e -> loadRecords());
+
+        viewPanel.add(new JScrollPane(studentTable), BorderLayout.CENTER);
+        viewPanel.add(btnRefresh, BorderLayout.SOUTH);
+
+        tabs.addTab("1. Student Admission", admitPanel);
+        tabs.addTab("2. Fee Payment", feePanel);
+        tabs.addTab("3. View All Records", viewPanel);
+
+        add(tabs);
+        loadRecords();
+    }
+
+    private Connection connect() throws SQLException {
+        return DriverManager.getConnection(URL, USER, PASS);
+    }
+
+    private void admitStudent() {
+        String name = txtName.getText().trim();
+        String phone = txtPhone.getText().trim();
+        String room = txtRoomNo.getText().trim();
+
+        try (Connection conn = connect()) {
+            PreparedStatement check = conn.prepareStatement("SELECT capacity, occupied FROM rooms WHERE room_no = ?");
+            check.setString(1, room);
+            ResultSet rs = check.executeQuery();
+
+            if (!rs.next()) {
+                JOptionPane.showMessageDialog(this, "Room does not exist! Try 101, 102, or 103.");
+                return;
+            }
+            if (rs.getInt("occupied") >= rs.getInt("capacity")) {
+                JOptionPane.showMessageDialog(this, "Room is already FULL!");
+                return;
+            }
+
+            PreparedStatement insert = conn.prepareStatement("INSERT INTO students (name, phone, room_no) VALUES (?, ?, ?)");
+            insert.setString(1, name);
+            insert.setString(2, phone);
+            insert.setString(3, room);
+            insert.executeUpdate();
+
+            PreparedStatement update = conn.prepareStatement("UPDATE rooms SET occupied = occupied + 1 WHERE room_no = ?");
+            update.setString(1, room);
+            update.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, "Student Admitted Successfully!");
+            txtName.setText(""); txtPhone.setText(""); txtRoomNo.setText("");
+            loadRecords();
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+        }
+    }
+
+    private void recordFee() {
+        try (Connection conn = connect()) {
+            PreparedStatement ps = conn.prepareStatement("INSERT INTO fees (student_id, amount, payment_date) VALUES (?, ?, CURDATE())");
+            ps.setInt(1, Integer.parseInt(txtStudId.getText().trim()));
+            ps.setDouble(2, Double.parseDouble(txtAmount.getText().trim()));
+            ps.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, "Fee Recorded!");
+            txtStudId.setText(""); txtAmount.setText("");
+            loadRecords();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+        }
+    }
+
+    private void loadRecords() {
+        tableModel.setRowCount(0);
+        String query = "SELECT s.student_id, s.name, s.phone, s.room_no, IFNULL(SUM(f.amount), 0) AS total_paid " +
+                       "FROM students s LEFT JOIN fees f ON s.student_id = f.student_id " +
+                       "GROUP BY s.student_id";
+        try (Connection conn = connect(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
+            while (rs.next()) {
+                tableModel.addRow(new Object[]{
+                    rs.getInt("student_id"),
+                    rs.getString("name"),
+                    rs.getString("phone"),
+                    rs.getString("room_no"),
+                    "₹" + rs.getDouble("total_paid")
+                });
+            }
+        } catch (SQLException ex) {
+            System.out.println("DB Load Error: " + ex.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new App().setVisible(true));
+    }
+}
