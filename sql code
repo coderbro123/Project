@@ -1,0 +1,27 @@
+CREATE DATABASE IF NOT EXISTS simple_hostel;
+USE simple_hostel;
+
+CREATE TABLE rooms (
+    room_no VARCHAR(10) PRIMARY KEY,
+    capacity INT NOT NULL,
+    occupied INT DEFAULT 0
+);
+
+CREATE TABLE students (
+    student_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(15) NOT NULL,
+    room_no VARCHAR(10),
+    FOREIGN KEY (room_no) REFERENCES rooms(room_no)
+);
+
+CREATE TABLE fees (
+    fee_id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT,
+    amount DECIMAL(8,2) NOT NULL,
+    payment_date DATE NOT NULL,
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+);
+
+INSERT INTO rooms VALUES ('101', 2, 0), ('102', 2, 0), ('103', 1, 0);
+
